@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Verificación{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <div class="card shadow">
+      <div class="card-body">
+        <h3 class="text-center mb-4">Verificación de Cuenta</h3>
+
+        <!-- Mensajes flash -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <p class="text-muted text-center">
+          Ingresa el código de 6 dígitos que enviamos a tu correo electrónico.
+        </p>
+
+        <form method="POST">
+          <div class="mb-3">
+            <label for="codigo" class="form-label">Código de verificación</label>
+            <input type="text" class="form-control" id="codigo" name="codigo" required>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Verificar</button>
+        </form>
+
+        <div class="text-center mt-3">
+          <a href="{{ url_for('reenviar_codigo') }}" class="btn btn-link">¿No recibiste el código? Reenviar</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

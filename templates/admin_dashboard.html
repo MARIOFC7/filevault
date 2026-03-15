@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block content %}
+<h2 class="mb-4">Panel de Administración</h2>
+
+<!-- Mensajes flash -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<!-- Tabla de usuarios con barra de progreso -->
+<h3 class="mb-3">Usuarios Registrados</h3>
+<table class="table table-striped table-hover">
+  <thead class="table-dark">
+    <tr>
+      <th>Nombre</th>
+      <th>Email</th>
+      <th>Cuota (bytes)</th>
+      <th>Usado (bytes)</th>
+      <th>Uso (%)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for u in usuarios %}
+    {% set porcentaje = (u.usado / u.cuota * 100) | round(2) %}
+    <tr>
+      <td>{{ u.nombre }}</td>
+      <td>{{ u.email }}</td>
+      <td>{{ u.cuota }}</td>
+      <td>{{ u.usado }}</td>
+      <td style="width: 200px;">
+        <div class="progress">
+          <div class="progress-bar {% if porcentaje > 80 %}bg-danger{% elif porcentaje > 50 %}bg-warning{% else %}bg-success{% endif %}"
+               role="progressbar"
+               style="width: {{ porcentaje }}%"
+               aria-valuenow="{{ porcentaje }}" aria-valuemin="0" aria-valuemax="100">
+            {{ porcentaje }}%
+          </div>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- Gráfico global de uso por usuario -->
+<div class="card shadow mt-4">
+  <div class="card-body">
+    <h5 class="card-title text-center">Uso de almacenamiento por usuario</h5>
+    <canvas id="barChart"></canvas>
+  </div>
+</div>
+
+<div class="text-center mt-3">
+  <a href="{{ url_for('logout') }}" class="btn btn-secondary">Cerrar Sesión</a>
+</div>
+
+<!-- Script Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const ctxBar = document.getElementById('barChart').getContext('2d');
+  new Chart(ctxBar, {
+    type: 'bar',
+    data: {
+      labels: [{% for u in usuarios %}'{{ u.nombre }}',{% endfor %}],
+      datasets: [{
+        label: 'Espacio usado (bytes)',
+        data: [{% for u in usuarios %}{{ u.usado }},{% endfor %}],
+        backgroundColor: 'rgba(54, 162, 235, 0.7)'
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: 'Bytes usados' }
+        }
+      }
+    }
+  });
+</script>
+{% endblock %}
+

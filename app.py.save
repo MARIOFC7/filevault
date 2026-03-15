@@ -1,0 +1,123 @@
+from flask import Flask, render_template, request, redirect, url_for, flash, session
+from werkzeug.security import generate_password_hash, check_password_hash
+from requests_oauthlib import OAuth2Session
+from models import db, Usuario
+import random
+
+app = Flask(__name__)
+app.secret_key = "clave_secreta"
+app.config['SQLALCHEMY_DATABASE_URI'] = "postgresql://usuario:password@localhost/tu_bd"
+db.init_app(app)
+
+# Configuración Google OAuth
+client_id = "TU_CLIENT_ID_DE_GOOGLE"
+client_secret = "TU_CLIENT_SECRET_DE_GOOGLE"
+authorization_base_url = "https://accounts.google.com/o/oauth2/auth"
+token_url = "https://accounts.google.com/o/oauth2/token"
+redirect_uri = "http://localhost:5000/callback"  # ✅ Debe coincidir con Google Console
+
+# ------------------- Registro -------------------
+@app.route('/registro', methods=['GET', 'POST'])
+def registro():
+    if request.method == 'POST':
+        nombre = request.form['nombre']
+        email = request.form['email']
+        contraseña = generate_password_hash(request.form['password'])
+        
+        if Usuario.query.filter_by(email=email).first():
+            flash('El correo ya está registrado', 'danger')
+            return redirect(url_for('registro'))
+        
+        codigo = str(random.randint(100000, 999999))
+        nuevo_usuario = Usuario(nombre=nombre, email=email, contraseña=contraseña, codigo_verificacion=codigo)
+        db.session.add(nuevo_usuario)
+        db.session.commit()
+
+        # Aquí deberías enviar el código por correo
+        session['email_verificacion'] = email
+        flash('Registro exitoso. Revisa tu correo para el código de verificación.', 'success')
+        return redirect(url_for('verificar'))
+    
+    return render_template('registro.html')
+
+# ------------------- Verificación -------------------
+@app.route('/verificar', methods=['GET', 'POST'])
+def verificar():
+    if request.method == 'POST':
+        codigo_ingresado = request.form['codigo']
+        email = session.get('email_verificacion')
+
+        usuario = Usuario.query.filter_by(email=email).first()
+        if usuario and usuario.codigo_verificacion == codigo_ingresado:
+            usuario.verificado = True
+            usuario.codigo_verificacion = None
+            db.session.commit()
+            flash('Cuenta verificada correctamente', 'success')
+            return redirect(url_for('login'))
+        else:
+            flash('Código incorrecto. Intenta nuevamente.', 'danger')
+
+    return render_template('verificar.html')
+
+# ------------------- Login normal -------------------
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form['email']
+        contraseña = request.form['password']
+        usuario = Usuario.query.filter_by(email=email).first()
+
+        if usuario and check_password_hash(usuario.contraseña, contraseña):
+            if not usuario.verificado:
+                session['email_verificacion'] = usuario.email
+                flash('Debes verificar tu cuenta antes de iniciar sesión.', 'warning')
+                return redirect(url_for('verificar'))
+
+            session['usuario_id'] = usuario.id
+            session['cuota'] = usuario.cuota
+            flash('Inicio de sesión exitoso', 'success')
+            return redirect(url_for('dashboard'))
+        else:
+            flash('Credenciales inválidas', 'danger')
+
+    return render_template('login.html')
+
+# ------------------- Login con Google -------------------
+@app.route("/login/google")
+def login_google():
+    google = OAuth2Session(client_id, redirect_uri=redirect_uri, scope=["openid", "email", "profile"])
+    authorization_url, state = google.authorization_url(authorization_base_url, access_type="offline", prompt="select_account")
+    session["oauth_state"] = state
+    return redirect(authorization_url)
+
+@app.route("/callback")
+def callback():
+    google = OAuth2Session(client_id, redirect_uri=redirect_uri, state=session["oauth_state"])
+    token = google.fetch_token(token_url, client_secret=client_secret, authorization_response=request.url)
+    session["oauth_token"] = token
+
+    # Obtener datos del usuario desde Google
+    resp = google.get("https://www.googleapis.com/oauth2/v1/userinfo")
+    user_info = resp.json()
+    email = user_info["email"]
+
+    # Buscar usuario en la BD (no crear cuentas nuevas)
+    usuario = Usuario.query.filter_by(email=email).first()
+    if not usuario:
+        flash("Tu cuenta no está registrada en el sistema. Usa el registro normal.", "danger")
+        return redirect(url_for("login"))
+
+    # Si existe, iniciar sesión
+    session["usuario_id"] = usuario.id
+    session["cuota"] = usuario.cuota
+    flash("Inicio de sesión con Google exitoso", "success")
+    return redirect(url_for("dashboard"))
+
+# ------------------- Dashboard -------------------
+@app.route('/dashboard')
+def dashboard():
+    # Aquí deberías cargar los archivos del usuario
+    archivos = []
+    return render_template('dashboard.html', archivos=archivos)
+
+
